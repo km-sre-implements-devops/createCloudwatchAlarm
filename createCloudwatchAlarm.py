@@ -12,8 +12,10 @@
 #   #################################
 
 import boto3
-from pprint import pprint
-from sys import argv
+#from argparse import ArgumentParser
+#from configparser import ConfigParser
+from sys import argv, exit
+#from os import environ
 
 ## args from terminal
 args = len(argv)
