@@ -57,22 +57,23 @@ def createECSAlarm(service_name, cluster_name, sns_topic):
     )
     return f"La alarma para el {service_name} se ha creado con exito"
 
-def createRDSAlarm(db_name, sns_topic):
+def createRDSAlarm(db_name, sns_topic, threshold):
     cloudwatch_client.put_metric_alarm(
-        AlarmName=f"{db_name}-OVER-80-HIGH-CPU",
+        AlarmName=f"{db_name}-OVER-{threshold}-HIGH-CPU",
         ComparisonOperator="GreaterThanThreshold",
         EvaluationPeriods=2,
         MetricName="CPUUtilization",
         Namespace="AWS/RDS",
         Period=60,
         Statistic="Average",
-        Threshold=80,
+        Threshold=threshold,
         ActionsEnabled=True,
-        AlarmDescription=f"La DB {db_name} ha superado el 80% del CPU por mas de 1 minuto",
+        AlarmDescription=f"La DB {db_name} ha superado el {threshold}% del CPU por mas de 1 minuto",
         AlarmActions=[sns_topic],
         TreatMissingData="missing",
         Dimensions=[
             {"Name": "DBInstanceIdentifier", "Value": db_name}
         ],
+        Unit='Percent'
     )
     return f"La alarma para la DB {db_name} se ha creado con exito"
