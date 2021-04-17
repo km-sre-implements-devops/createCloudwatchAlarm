@@ -12,128 +12,220 @@
 #   #################################
 
 import boto3
-#from argparse import ArgumentParser
-#from configparser import ConfigParser
+from pprint import pprint
+from argparse import ArgumentParser
 from sys import argv, exit
-#from os import environ
-
-## args from terminal
-args = len(argv)
-profile = argv[1]
-if args == 2 and profile == "dev":
-    profile_name = c.PROFILES[profile]
-elif args == 2 and profile == "prod":
-    profile_name = c.PROFILES[profile]
-else:
-    cluster_name = ""
-if args == 3:
-    cluster_name = argv[2]
-if args == 4:
-    services_alarm = argv[3]
-
-######### CLIENT SESSION ###############
-session = boto3.Session(profile_name=profile_name)
-
-######### CLOUDWATCH CLIENT ############
-cloudwatch_client = session.client("cloudwatch")
+import config as c
 
 
 def listsAllRDS():
     ######### RDS CLIENT ###################
-    try:
-        rds_client = session.client("rds")
-    except Exception as err:
-        return err
+    rds_client = session.client('rds')
 
     listOfNameRdsInstances = []
-    describeRdsInstances = rds_client.describe_db_instances()["DBInstances"]
+    describeRdsInstances = rds_client.describe_db_instances()['DBInstances']
     for i in range(len(describeRdsInstances)):
-        if "prod" in describeRdsInstances[i]["DBInstanceIdentifier"]:
+        if "prod" in describeRdsInstances[i]['DBInstanceIdentifier']:
             listOfNameRdsInstances.append(
-                describeRdsInstances[i]["DBInstanceIdentifier"]
-            )
-        elif "dev" in describeRdsInstances[i]["DBInstanceIdentifier"]:
+                describeRdsInstances[i]['DBInstanceIdentifier'])
+        elif "dev" in describeRdsInstances[i]['DBInstanceIdentifier']:
             listOfNameRdsInstances.append(
-                describeRdsInstances[i]["DBInstanceIdentifier"]
-            )
+                describeRdsInstances[i]['DBInstanceIdentifier'])
     return listOfNameRdsInstances
 
 
-def listsAllECS(services_alarm, cluster_name):
+def listsAllEcsServices(cluster_name):
     ######## ECS CLIENT ##########
-
-    try:
-        ecs_client = session.client("ecs")
-    except Exception as err:
-        return err
+    ecs_client = session.client("ecs")
 
     response = ecs_client.list_services(cluster=cluster_name)
-    next_token = response["nextToken"]
-    paginator = ecs_client.get_paginator("list_services")
-    response_iterator = paginator.paginate(
-        cluster=cluster_name,
-        PaginationConfig={
-            "MaxItems": 100,
-            "PageSize": 100,
-            "StartingToken": next_token,
-        },
-    )
-    listOfNamesServices = [
-        name
-        for names in [
-            services_name.split("/")
-            for i in response_iterator
-            for services_name in i["serviceArns"]
-        ]
-        for name in names
-        if "Code" in name
-    ]
-    return listOfNamesServices
+    paginator = ecs_client.get_paginator('list_services')
 
-
-def createECSAlarm(service_name, cluster_name, sns_topic):
-    try:
-        cloudwatch_client.put_metric_alarm(
-            AlarmName=f"{service_name}-is-DOWN",
-            ComparisonOperator="LessThanThreshold",
-            EvaluationPeriods=1,
-            MetricName="CPUUtilization",
-            Namespace="AWS/ECS",
-            Period=60,
-            Statistic="SampleCount",
-            Threshold=1,
-            ActionsEnabled=True,
-            AlarmDescription=f"El servicio {service_name} ha estado caido por mas de 1 minuto",
-            AlarmActions=[sns_topic],
-            TreatMissingData="missing",
-            Dimensions=[
-                {"Name": "ClusterName", "Value": cluster_name},
-                {"Name": "ServiceName", "Value": service_name},
-            ],
+    def paginate(next_token):
+        response_iterator = paginator.paginate(
+            cluster=cluster_name,
+            PaginationConfig={
+                'MaxItems': 100,
+                'PageSize': 100,
+                'StartingToken': next_token,
+            },
         )
-        return f"La alarma para el {service_name} se ha creado con exito"
-    except Exception as err:
-        return err
 
+        listOfNamesServices = [
+            name for names in [
+                services_name.split('/') for i in response_iterator
+                for services_name in i['serviceArns']
+            ] for name in names if 'Code' in name
+        ]
+        return listOfNamesServices
+
+    while 'nextToken' in response:
+        services_list = paginate(response['nextToken'])
+        return services_list
+
+    return paginate(next_token=None)
+
+
+def listOfAllClusters():
+    ######## ECS CLIENT ##########
+    ecs_client = session.client("ecs")
+
+    response = ecs_client.list_clusters()
+    lists_clusters = [
+        clusters[1] for clusters in [
+            clusters_list.split("/")
+            for clusters_list in response["clusterArns"]
+        ]
+    ]
+    return lists_clusters
+
+
+def createEcsAlarm(service_name, cluster_name, sns_topic):
+
+    cloudwatch_client.put_metric_alarm(
+        AlarmName=f'{service_name}-is-DOWN',
+        ComparisonOperator='LessThanThreshold',
+        EvaluationPeriods=1,
+        MetricName='CPUUtilization',
+        Namespace='AWS/ECS',
+        Period=60,
+        Statistic='SampleCount',
+        Threshold=1,
+        ActionsEnabled=True,
+        AlarmDescription=
+        f'El servicio {service_name} ha estado caido por mas de 1 minuto',
+        AlarmActions=[sns_topic],
+        TreatMissingData="missing",
+        Dimensions=[
+            {
+                'Name': 'ClusterName',
+                'Value': cluster_name
+            },
+            {
+                'Name': 'ServiceName',
+                'Value': service_name
+            },
+        ],
+    )
+    return f"La alarma para el servicio {service_name} se ha creado con exito"
 
 def createRDSAlarm(db_name, sns_topic, threshold):
-    try:
-        cloudwatch_client.put_metric_alarm(
-            AlarmName=f"Motor RDS {db_name}-OVER-{threshold}%-HIGH-CPU",
-            ComparisonOperator="GreaterThanThreshold",
-            EvaluationPeriods=2,
-            MetricName="CPUUtilization",
-            Namespace="AWS/RDS",
-            Period=300,
-            Statistic="Average",
-            Threshold=threshold,
-            ActionsEnabled=True,
-            AlarmDescription=f"El motor RDS '{db_name}' ha superado el {threshold}% del CPU por mas de 5 minutos",
-            AlarmActions=[sns_topic],
-            TreatMissingData="missing",
-            Dimensions=[{"Name": "DBInstanceIdentifier", "Value": db_name}],
-            Unit="Percent",
-        )
-        return f"La alarma para la DB {db_name} se ha creado con exito"
-    except Exception as err:
-        return err
+
+    cloudwatch_client.put_metric_alarm(
+        AlarmName=f"Motor RDS {db_name}-OVER-{threshold}%-HIGH-CPU",
+        ComparisonOperator="GreaterThanThreshold",
+        EvaluationPeriods=2,
+        MetricName="CPUUtilization",
+        Namespace="AWS/RDS",
+        Period=300,
+        Statistic="Average",
+        Threshold=threshold,
+        ActionsEnabled=True,
+        AlarmDescription=
+        f"El motor RDS '{db_name}' ha superado el {threshold}% del CPU por mas de 5 minutos",
+        AlarmActions=[sns_topic],
+        TreatMissingData="missing",
+        Dimensions=[{
+            "Name": "DBInstanceIdentifier",
+            "Value": db_name
+        }],
+        Unit='Percent')
+    return f"La alarma para la DB {db_name} se ha creado con exito"
+
+# Leyendo parametros entregados por la terminal
+parser = ArgumentParser(
+    description="Crea alarmas en cloudwatch para los servicios ECS y RDS. \
+    Tambien pueden ser listados todos los servicios.")
+
+parser.add_argument(
+    "-s",
+    "--service",
+    help="tipo de servicio al cual se le creara la alarma, ej: ecs, rds",
+    required=True)
+parser.add_argument("-e",
+                    "--enviroment",
+                    help="Enviroment de trabajo ej: wdev, wstage, wprod",
+                    required=True)
+parser.add_argument("-t", "--threshold", type=int, help="Threshold entre 0 a 100")
+parser.add_argument(
+    "-l",
+    "--lists",metavar='NOMBRE DEL CLUSTER o all',
+    help=
+    "Listar motores RDS o servicios actualmente corriendo en el cluster ECS elegido",
+    nargs='?')
+parser.add_argument(
+    "-c",
+    "--create", metavar='NOMBRE DEL CLUSTER o RDS o SERVICIO o all',
+    help=
+    "Crea alarmas para un servicio o todos los servicios de un cluster ECS o RDS \
+     ejemplos: -c all, esto mostrara una lista de todos los cluster disponibles y preguntara por una opcion. \
+     despues de ingresar la opcion -c creara alarmas para todos los servicios del cluster seleccionado"
+)
+parser.parse_args(args=None if argv[1:] else ['--help'])
+
+args = parser.parse_args()
+env = c.PROFILES[args.enviroment]
+sns_topic = c.SNS_TOPIC[args.enviroment]
+
+######### CLIENT SESSION ###############
+session = boto3.Session(profile_name=env)
+
+######### CLOUDWATCH CLIENT ############
+cloudwatch_client = session.client('cloudwatch')
+
+class Switcher(object):
+    def service(self, argument):
+        option = getattr(self, argument, lambda: "Invalid option")
+        return option()
+
+    def create(self):
+        if args.create != "all" and args.service == "ecs":
+            if args.enviroment in args.create.split('-'):
+                clustername = args.create.split(
+                    '-')[0] + "-" + args.create.split('-')[1]
+                response = createEcsAlarm(args.create, clustername, sns_topic)
+                return response
+        elif args.create == "all" and args.service == "ecs":
+            print("\nLista de todos los cluster diponibles del ambiente \n")
+            print(listOfAllClusters())
+            clustername = input("Ingrese el nombre del cluster: ")
+            for i in listsAllEcsServices(clustername):
+                response = createEcsAlarm(i, clustername, sns_topic)
+                return response
+        else:
+            if args.create == "all" and args.threshold != None and args.service == "rds":
+                for i in listsAllRDS():
+                    response = createRDSAlarm(i, sns_topic, args.threshold)
+                    return response
+            elif args.create != "all" and args.service == "rds" and args.threshold != None:
+                response = createRDSAlarm(args.create, sns_topic,
+                                          args.threshold)
+                return response
+            else:
+                return "Parametro threshold no esta definido"
+
+    def rds(self):
+        if args.lists == "all":
+            response = listsAllRDS()
+            return response
+        else:
+            if args.create != None:
+                return self.create()
+
+    def ecs(self):
+        if args.lists != None and args.lists != "all":
+            response = listsAllEcsServices(args.lists)
+            return response
+        elif args.lists == "all":
+            return listOfAllClusters()
+        elif args.create:
+            return self.create()
+
+try:
+
+    s = Switcher()
+    response = s.service(args.service)
+    print(response)
+
+except Exception as e:
+    print(f"Exception occured:{e}")
