@@ -109,6 +109,7 @@ def createEcsAlarm(service_name, cluster_name, sns_topic):
     )
     return f"La alarma para el servicio {service_name} se ha creado con exito"
 
+
 def createRDSAlarm(db_name, sns_topic, threshold):
 
     cloudwatch_client.put_metric_alarm(
@@ -132,6 +133,7 @@ def createRDSAlarm(db_name, sns_topic, threshold):
         Unit='Percent')
     return f"La alarma para la DB {db_name} se ha creado con exito"
 
+
 # Leyendo parametros entregados por la terminal
 parser = ArgumentParser(
     description="Crea alarmas en cloudwatch para los servicios ECS y RDS. \
@@ -146,16 +148,21 @@ parser.add_argument("-e",
                     "--enviroment",
                     help="Enviroment de trabajo ej: wdev, wstage, wprod",
                     required=True)
-parser.add_argument("-t", "--threshold", type=int, help="Threshold entre 0 a 100")
+parser.add_argument("-t",
+                    "--threshold",
+                    type=int,
+                    help="Threshold entre 0 a 100")
 parser.add_argument(
     "-l",
-    "--lists",metavar='NOMBRE DEL CLUSTER o all',
+    "--lists",
+    metavar='NOMBRE DEL CLUSTER o all',
     help=
     "Listar motores RDS o servicios actualmente corriendo en el cluster ECS elegido",
     nargs='?')
 parser.add_argument(
     "-c",
-    "--create", metavar='NOMBRE DEL CLUSTER o RDS o SERVICIO o all',
+    "--create",
+    metavar='NOMBRE DEL CLUSTER o RDS o SERVICIO o all',
     help=
     "Crea alarmas para un servicio o todos los servicios de un cluster ECS o RDS \
      ejemplos: -c all, esto mostrara una lista de todos los cluster disponibles y preguntara por una opcion. \
@@ -172,6 +179,7 @@ session = boto3.Session(profile_name=env)
 
 ######### CLOUDWATCH CLIENT ############
 cloudwatch_client = session.client('cloudwatch')
+
 
 class Switcher(object):
     def service(self, argument):
@@ -220,6 +228,7 @@ class Switcher(object):
             return listOfAllClusters()
         elif args.create:
             return self.create()
+
 
 try:
 
