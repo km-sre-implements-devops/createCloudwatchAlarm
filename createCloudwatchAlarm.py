@@ -132,6 +132,64 @@ def createRDSAlarm(db_name, sns_topic, threshold):
         Unit='Percent')
     return f"La alarma para la DB {db_name} se ha creado con exito"
 
+def createECSAlarmCPU(service_name, cluster_name, sns_topic, threshold):
+
+    cloudwatch_client.put_metric_alarm(
+        AlarmName=f'CPU del servicio {service_name}-OVER-{threshold}%-HIGH-CPU',
+        ComparisonOperator='GreaterThanThreshold',
+        EvaluationPeriods=2,
+        MetricName='CPUUtilization',
+        Namespace='AWS/ECS',
+        Period=120,
+        Statistic='Average',
+        Threshold=threshold,
+        ActionsEnabled=True,
+        AlarmDescription=
+        f'El CPU del servicio {service_name} ha estado sobre los {threshold}% en 2 periodos de 2 minutos',
+        AlarmActions=[sns_topic],
+        TreatMissingData="missing",
+        Dimensions=[
+            {
+                'Name': 'ClusterName',
+                'Value': cluster_name
+            },
+            {
+                'Name': 'ServiceName',
+                'Value': service_name
+            },
+        ],
+    )
+    return f"La alarma para el servicio {service_name} se ha creado con exito"
+    
+def createECSAlarmMEM(service_name, cluster_name, sns_topic, threshold):
+
+    cloudwatch_client.put_metric_alarm(
+        AlarmName=f'MemoryUtilization del servicio {service_name}-OVER-{threshold}%-HIGH-MEM',
+        ComparisonOperator='GreaterThanThreshold',
+        EvaluationPeriods=2,
+        MetricName='MemoryUtilization',
+        Namespace='AWS/ECS',
+        Period=120,
+        Statistic='Average',
+        Threshold=threshold,
+        ActionsEnabled=True,
+        AlarmDescription=
+        f'La memoria del servicio {service_name} ha estado sobre los {threshold}% en 2 periodos de 2 minutos',
+        AlarmActions=[sns_topic],
+        TreatMissingData="missing",
+        Dimensions=[
+            {
+                'Name': 'ClusterName',
+                'Value': cluster_name
+            },
+            {
+                'Name': 'ServiceName',
+                'Value': service_name
+            },
+        ],
+    )
+    return f"La alarma para el servicio {service_name} se ha creado con exito"
+
 # Leyendo parametros entregados por la terminal
 parser = ArgumentParser(
     description="Crea alarmas en cloudwatch para los servicios ECS y RDS. \
@@ -183,15 +241,42 @@ class Switcher(object):
             if args.enviroment in args.create.split('-'):
                 clustername = args.create.split(
                     '-')[0] + "-" + args.create.split('-')[1]
-                response = createEcsAlarm(args.create, clustername, sns_topic)
-                return response
+                if "Service" in args.create:
+                    metrics = input("Ingrese metrics(parametros disponibles, down, cpu, mem): ")
+
+                    if metrics == "down":
+                        response = createEcsAlarm(args.create, clustername, sns_topic)
+                        return response
+                    elif metrics == "cpu":
+                        threshold = input("Ingrese threshold entre 0 a 100: ")
+                        response = createECSAlarmCPU(args.create, clustername, sns_topic, int(threshold))
+                        return response
+                    elif metrics == "mem":
+                        threshold = input("Ingrese threshold entre 0 a 100: ")
+                        response = createECSAlarmMEM(args.create, clustername, sns_topic, int(threshold))
+                        return response
+                else:
+                    return "El parametro -c debe ser un servicio" 
+
         elif args.create == "all" and args.service == "ecs":
             print("\nLista de todos los cluster diponibles del ambiente \n")
             print(listOfAllClusters())
             clustername = input("Ingrese el nombre del cluster: ")
-            for i in listsAllEcsServices(clustername):
-                response = createEcsAlarm(i, clustername, sns_topic)
-                return response
+            metrics = input("Ingrese metrics(parametros disponibles, down, cpu, mem): ")
+            if metrics == "down":
+                for i in listsAllEcsServices(clustername):
+                    response = createEcsAlarm(i, clustername, sns_topic)
+                    return response
+            elif metrics == "cpu":
+                threshold = input("Ingrese threshold entre 0 a 100: ")
+                for i in listsAllEcsServices(clustername):
+                    response = createECSAlarmCPU(i, clustername, sns_topic, int(threshold))
+                    return response
+            elif metrics == "mem":
+                threshold = input("Ingrese threshold entre 0 a 100: ")
+                for i in listsAllEcsServices(clustername):
+                    response = createECSAlarmMEM(i, clustername, sns_topic, int(threshold))
+                    return response
         else:
             if args.create == "all" and args.threshold != None and args.service == "rds":
                 for i in listsAllRDS():
