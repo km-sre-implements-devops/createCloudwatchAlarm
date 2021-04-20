@@ -17,7 +17,6 @@ from argparse import ArgumentParser
 from sys import argv, exit
 import config as c
 
-
 def listsAllRDS():
     ######### RDS CLIENT ###################
     rds_client = session.client('rds')
@@ -32,7 +31,6 @@ def listsAllRDS():
             listOfNameRdsInstances.append(
                 describeRdsInstances[i]['DBInstanceIdentifier'])
     return listOfNameRdsInstances
-
 
 def listsAllEcsServices(cluster_name):
     ######## ECS CLIENT ##########
@@ -65,7 +63,6 @@ def listsAllEcsServices(cluster_name):
 
     return paginate(next_token=None)
 
-
 def listOfAllClusters():
     ######## ECS CLIENT ##########
     ecs_client = session.client("ecs")
@@ -78,7 +75,6 @@ def listOfAllClusters():
         ]
     ]
     return lists_clusters
-
 
 def createEcsAlarm(service_name, cluster_name, sns_topic):
 
@@ -204,16 +200,21 @@ parser.add_argument("-e",
                     "--enviroment",
                     help="Enviroment de trabajo ej: wdev, wstage, wprod",
                     required=True)
-parser.add_argument("-t", "--threshold", type=int, help="Threshold entre 0 a 100")
+parser.add_argument("-t",
+                    "--threshold",
+                    type=int,
+                    help="Threshold entre 0 a 100")
 parser.add_argument(
     "-l",
-    "--lists",metavar='NOMBRE DEL CLUSTER o all',
+    "--lists",
+    metavar='NOMBRE DEL CLUSTER o all',
     help=
     "Listar motores RDS o servicios actualmente corriendo en el cluster ECS elegido",
     nargs='?')
 parser.add_argument(
     "-c",
-    "--create", metavar='NOMBRE DEL CLUSTER o RDS o SERVICIO o all',
+    "--create",
+    metavar='NOMBRE DEL CLUSTER o RDS o SERVICIO o all',
     help=
     "Crea alarmas para un servicio o todos los servicios de un cluster ECS o RDS \
      ejemplos: -c all, esto mostrara una lista de todos los cluster disponibles y preguntara por una opcion. \
